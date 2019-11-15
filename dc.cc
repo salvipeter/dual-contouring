@@ -12,6 +12,8 @@ bool computeCell(const Point3D &origin, const Vector3D &delta,
       negative = true;
     else if (vertices[i] > 0)
       positive = true;
+    else
+      positive = negative = true;
   if (!negative || !positive)
     return false;
 
@@ -26,16 +28,13 @@ bool computeCell(const Point3D &origin, const Vector3D &delta,
   Point3D mean(0, 0, 0);
   size_t count = 0;
   for (size_t i = 0; i < 12; ++i) {
-    double a = vertices[edges[2*i]], b = vertices[edges[2*i+1]];
+    size_t v1 = edges[2*i], v2 = edges[2*i+1];
+    double a = vertices[v1], b = vertices[v2];
     if (a * b > 0)
       continue;
     double x = std::abs(a) / std::abs(b - a);
     size_t c = i / 4;
-    mean +=
-      dirs[0] * (edges[2*i] / 4) +
-      dirs[1] * ((edges[2*i] % 4) / 2) +
-      dirs[2] * (edges[2*i] % 2) +
-      dirs[c] * x;
+    mean += dirs[0] * (v1 / 4) + dirs[1] * ((v1 % 4) / 2) + dirs[2] * (v1 % 2) + dirs[c] * x;
     ++count;
   }
   surface_point = origin + mean / count;
