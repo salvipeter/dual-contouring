@@ -2,8 +2,10 @@
 
 #include <fstream>
 
+namespace DualContouring {
+
 void
-QuadMesh::addPoint(const Geometry::Point3D &p) {
+QuadMesh::addPoint(const Point3D &p) {
   points.push_back(p);
 }
 
@@ -20,4 +22,6 @@ QuadMesh::writeOBJ(std::string filename) const {
     f << "v " << p[0] << ' ' << p[1] << ' ' << p[2] << std::endl;
   for (const auto &t : quads)
     f << "f " << t[0] << ' ' << t[1] << ' ' << t[2] << ' ' << t[3] << std::endl;
+}
+
 }

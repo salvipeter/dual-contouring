@@ -1,56 +1,51 @@
 #include "dc.hh"
 
-using namespace Geometry;
-
 #include <iostream>
 
-namespace {
+namespace DualContouring {
 
-  bool computeCell(const Point3D &origin, const Vector3D &delta,
-                   const std::array<double, 8> &vertices, Point3D &surface_point) {
-    bool negative = false, positive = false;
-    for (size_t i = 0; i < 8; ++i)
-      if (vertices[i] < 0)
-        negative = true;
-      else if (vertices[i] > 0)
-        positive = true;
-    if (!negative || !positive)
-      return false;
+bool computeCell(const Point3D &origin, const Vector3D &delta,
+                 const std::array<double, 8> &vertices, Point3D &surface_point) {
+  bool negative = false, positive = false;
+  for (size_t i = 0; i < 8; ++i)
+    if (vertices[i] < 0)
+      negative = true;
+    else if (vertices[i] > 0)
+      positive = true;
+  if (!negative || !positive)
+    return false;
 
-    // Find all edge intersections, and take their mean
-    static const std::array<size_t, 24> edges =
-      { 0, 4, 1, 5, 2, 6, 3, 7, 0, 2, 1, 3, 4, 6, 5, 7, 0, 1, 2, 3, 4, 5, 6, 7 };
-    std::array<Vector3D, 3> dirs =
-      { { { delta[0], 0, 0 },
-          { 0, delta[1], 0 },
-          { 0, 0, delta[2] } } };
+  // Find all edge intersections, and take their mean
+  static const std::array<size_t, 24> edges =
+    { 0, 4, 1, 5, 2, 6, 3, 7, 0, 2, 1, 3, 4, 6, 5, 7, 0, 1, 2, 3, 4, 5, 6, 7 };
+  std::array<Vector3D, 3> dirs =
+    { { { delta[0], 0, 0 },
+        { 0, delta[1], 0 },
+        { 0, 0, delta[2] } } };
 
-    Point3D mean(0, 0, 0);
-    size_t count = 0;
-    for (size_t i = 0; i < 12; ++i) {
-      double a = vertices[edges[2*i]], b = vertices[edges[2*i+1]];
-      if (a * b > 0)
-        continue;
-      double x = std::abs(a) / std::abs(b - a);
-      size_t c = i / 4;
-      mean +=
-        dirs[0] * (edges[2*i] / 4) +
-        dirs[1] * ((edges[2*i] % 4) / 2) +
-        dirs[2] * (edges[2*i] % 2) +
-        dirs[c] * x;
-      ++count;
-    }
-    surface_point = origin + mean / count;
-    return true;
+  Point3D mean(0, 0, 0);
+  size_t count = 0;
+  for (size_t i = 0; i < 12; ++i) {
+    double a = vertices[edges[2*i]], b = vertices[edges[2*i+1]];
+    if (a * b > 0)
+      continue;
+    double x = std::abs(a) / std::abs(b - a);
+    size_t c = i / 4;
+    mean +=
+      dirs[0] * (edges[2*i] / 4) +
+      dirs[1] * ((edges[2*i] % 4) / 2) +
+      dirs[2] * (edges[2*i] % 2) +
+      dirs[c] * x;
+    ++count;
   }
-
+  surface_point = origin + mean / count;
+  return true;
 }
 
-QuadMesh
-dualContouring(std::function<double(const Point3D &)> f,
-               double isolevel, 
-               const std::array<Point3D, 2> &bounding_box, 
-               const std::array<size_t, 3> &resolution) {
+QuadMesh isosurface(std::function<double(const Point3D &)> f,
+                    double isolevel, 
+                    const std::array<Point3D, 2> &bounding_box, 
+                    const std::array<size_t, 3> &resolution) {
   QuadMesh mesh;
   std::vector<size_t> cells;
   cells.reserve(resolution[0] * resolution[1] * resolution[2]);
@@ -129,4 +124,6 @@ dualContouring(std::function<double(const Point3D &)> f,
   }
 
   return mesh;
+}
+
 }
