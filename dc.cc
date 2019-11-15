@@ -1,7 +1,5 @@
 #include "dc.hh"
 
-#include <iostream>
-
 namespace DualContouring {
 
 bool computeCell(const Point3D &origin, const Vector3D &delta,
@@ -12,8 +10,6 @@ bool computeCell(const Point3D &origin, const Vector3D &delta,
       negative = true;
     else if (vertices[i] > 0)
       positive = true;
-    else
-      positive = negative = true;
   if (!negative || !positive)
     return false;
 
@@ -41,8 +37,7 @@ bool computeCell(const Point3D &origin, const Vector3D &delta,
   return true;
 }
 
-QuadMesh isosurface(std::function<double(const Point3D &)> f,
-                    double isolevel, 
+QuadMesh isosurface(std::function<double(const Point3D &)> f, double isolevel,
                     const std::array<Point3D, 2> &bounding_box, 
                     const std::array<size_t, 3> &resolution) {
   QuadMesh mesh;
@@ -62,7 +57,8 @@ QuadMesh isosurface(std::function<double(const Point3D &)> f,
       double y = delta[1] * j;
       for (size_t k = 0; k <= resolution[2]; ++k) {
         double z = delta[2] * k;
-        values.push_back(f(bounding_box[0] + Vector3D(x, y, z)) - isolevel);
+        double v = f(bounding_box[0] + Vector3D(x, y, z)) - isolevel;
+        values.push_back(v != 0 ? v : 1e-15); // handling zeros is a nightmare
       }
     }
   }
