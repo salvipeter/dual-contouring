@@ -1,28 +1,10 @@
 #include "dc.hh"
 
-#include <set>
-
-// Based on:
-//   S.F.F. Gibson,
-//     Constrained elastic surface nets: generating smooth surfaces from binary segmented data.
-//   In: Proceedings of Medical Image Computation and Computer Assisted Interventions,
-//       pp. 888–898, 1998.
-
-// This method is not really dual contouring, as it only uses the sign of the data.
-
 using namespace Geometry;
 
 #include <iostream>
 
 namespace {
-
-  void limitToCell(Point3D &p, const Point3D &min, const Point3D &max) {
-    for (size_t c = 0; c < 3; ++c)
-      if (p[c] < min[c])
-        p[c] = min[c];
-      else if (p[c] > max[c])
-        p[c] = max[c];
-  }
 
   bool computeCell(const Point3D &origin, const Vector3D &delta,
                    const std::array<double, 8> &vertices, Point3D &surface_point) {
@@ -35,7 +17,30 @@ namespace {
     if (!negative || !positive)
       return false;
 
-    surface_point = origin + delta * 0.5;
+    // Find all edge intersections, and take their mean
+    static const std::array<size_t, 24> edges =
+      { 0, 4, 1, 5, 2, 6, 3, 7, 0, 2, 1, 3, 4, 6, 5, 7, 0, 1, 2, 3, 4, 5, 6, 7 };
+    std::array<Vector3D, 3> dirs =
+      { { { delta[0], 0, 0 },
+          { 0, delta[1], 0 },
+          { 0, 0, delta[2] } } };
+
+    Point3D mean(0, 0, 0);
+    size_t count = 0;
+    for (size_t i = 0; i < 12; ++i) {
+      double a = vertices[edges[2*i]], b = vertices[edges[2*i+1]];
+      if (a * b > 0)
+        continue;
+      double x = std::abs(a) / std::abs(b - a);
+      size_t c = i / 4;
+      mean +=
+        dirs[0] * (edges[2*i] / 4) +
+        dirs[1] * ((edges[2*i] % 4) / 2) +
+        dirs[2] * (edges[2*i] % 2) +
+        dirs[c] * x;
+      ++count;
+    }
+    surface_point = origin + mean / count;
     return true;
   }
 
@@ -53,8 +58,6 @@ dualContouring(std::function<double(const Point3D &)> f,
 
   auto axis = bounding_box[1] - bounding_box[0];
   Vector3D delta(axis[0] / resolution[0], axis[1] / resolution[1], axis[2] / resolution[2]);
-
-  double tolerance = 1.0e-8;
 
   // Compute distances at the cell corners
   std::vector<double> values;
@@ -95,7 +98,6 @@ dualContouring(std::function<double(const Point3D &)> f,
         bool found = computeCell(origin, delta, vertices, surface_point);
         if (found) {
           mesh.addPoint(surface_point);
-          point2corner.push_back(origin);
           cells.push_back(point_index++);
         } else
           cells.push_back(0);
@@ -125,33 +127,6 @@ dualContouring(std::function<double(const Point3D &)> f,
       }
     }
   }
-
-  // Create the adjacency graph
-  std::vector<std::set<size_t>> adjacency(mesh.points.size());
-  for (auto &quad : mesh.quads) {
-    adjacency[quad[0]-1].insert(quad[1]-1);
-    adjacency[quad[1]-1].insert(quad[2]-1);
-    adjacency[quad[2]-1].insert(quad[3]-1);
-    adjacency[quad[3]-1].insert(quad[0]-1);
-  }
-
-  // Smooth the mesh
-  double max_change;
-  do {
-    max_change = 0;
-    for (size_t i = 0; i < adjacency.size(); ++i) {
-      Vector3D mean(0, 0, 0);
-      for (size_t neighbor : adjacency[i])
-        mean += mesh.points[neighbor];
-      mean /= adjacency[i].size();
-      const auto &origin = point2corner[i];
-      limitToCell(mean, origin, origin + delta);
-      double change = (mesh.points[i] - mean).norm();
-      if (change > max_change)
-        max_change = change;
-      mesh.points[i] = mean;
-    }
-  } while (max_change > tolerance);
 
   return mesh;
 }
