@@ -2,6 +2,8 @@
 
 using namespace Geometry;
 
+#include <iostream>
+
 namespace {
 
   bool computeCell(const Point3D &origin, const std::array<Vector3D, 3> &delta,
@@ -42,12 +44,12 @@ dualContouring(std::function<double(const Point3D &)> f,
   std::vector<double> values;
   values.reserve((resolution[0] + 1) * (resolution[1] + 1) * (resolution[2] + 1));
   for (size_t i = 0; i <= resolution[0]; ++i) {
-    double u = (double)i / resolution[0];
+    double x = delta[0][0] * i;
     for (size_t j = 0; j <= resolution[1]; ++j) {
-      double v = (double)j / resolution[1];
+      double y = delta[1][1] * j;
       for (size_t k = 0; k <= resolution[2]; ++k) {
-        double w = (double)k / resolution[2];
-        values.push_back(f({u, v, w}));
+        double z = delta[2][2] * k;
+        values.push_back(f(bounding_box[0] + Vector3D(x, y, z)) - isolevel);
       }
     }
   }
