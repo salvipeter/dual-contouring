@@ -108,7 +108,11 @@ QuadMesh isosurface(std::function<double(const Point3D &)> f, double isolevel,
           size_t index = i * ni + j * nj + k * nk;
           size_t a = cells[index], b = cells[index-nj], c = cells[index-nj-nk], d = cells[index-nk];
           if (a * b * c * d != 0) {
-            if (values[i*mi+j*mj+k*mk] < 0)
+            size_t vi = i * mi + j * mj + k * mk;
+            double v1 = values[vi], v2 = values[vi+mi];
+            if (v1 * v2 > 0)
+              continue;
+            if (v1 < 0)
               mesh.addQuad(a, b, c, d);
             else
               mesh.addQuad(d, c, b, a);
