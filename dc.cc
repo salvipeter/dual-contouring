@@ -81,7 +81,7 @@ QuadMesh isosurface(std::function<double(const Point3D &)> f, double isolevel,
               vertices[vi] = values[index+di*mi+dj*mj+dk];
 
         Point3D origin = bounding_box[0] +
-          Vector3D(delta[0], 0, 0) * i +
+          Vector3D(delta[0] * i, 0, 0) +
           Vector3D(0, delta[1] * j, 0) +
           Vector3D(0, 0, delta[2] * k);
         Point3D surface_point;
