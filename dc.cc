@@ -39,6 +39,45 @@ bool computeCell(const Point3D &origin, const Vector3D &delta,
   return true;
 }
 
+std::vector<size_t> addPoints(QuadMesh &mesh, const std::vector<double> &values,
+                              const Point3D &corner, const Vector3D &delta,
+                              const std::array<size_t, 3> &resolution) {
+  std::vector<size_t> cells;
+  cells.reserve(resolution[0] * resolution[1] * resolution[2]);
+
+  size_t mi = (resolution[1] + 1) * (resolution[2] + 1), mj = (resolution[2] + 1);
+  size_t point_index = 1;
+  std::array<double, 8> vertices;
+  for (size_t i = 0; i < resolution[0]; ++i) {
+    size_t index1 = i * mi;
+    for (size_t j = 0; j < resolution[1]; ++j) {
+      size_t index2 = index1 + j * mj;
+      for (size_t k = 0; k < resolution[2]; ++k) {
+        size_t index = index2 + k;
+
+        // Gather the distance values for cell (i,j,k)
+        for (size_t di = 0, vi = 0; di <= 1; ++di)
+          for (size_t dj = 0; dj <= 1; ++dj)
+            for (size_t dk = 0; dk <= 1; ++dk, ++vi)
+              vertices[vi] = values[index+di*mi+dj*mj+dk];
+
+        Point3D origin = corner +
+          Vector3D(delta[0] * i, 0, 0) +
+          Vector3D(0, delta[1] * j, 0) +
+          Vector3D(0, 0, delta[2] * k);
+        Point3D surface_point;
+        if (computeCell(origin, delta, vertices, surface_point)) {
+          mesh.addPoint(surface_point);
+          cells.push_back(point_index++);
+        } else
+          cells.push_back(0);
+      }
+    }
+  }
+
+  return cells;
+}
+
 void addQuads(QuadMesh &mesh, const std::vector<double> &values, const std::vector<size_t> &cells,
               const std::array<size_t, 3> &resolution) {
   static constexpr std::array<size_t, 3> c1 = { 1, 2, 0 }, c2 = { 2, 0, 1 };
@@ -71,10 +110,6 @@ void addQuads(QuadMesh &mesh, const std::vector<double> &values, const std::vect
 QuadMesh isosurface(std::function<double(const Point3D &)> f, double isolevel,
                     const std::array<Point3D, 2> &bounding_box, 
                     const std::array<size_t, 3> &resolution) {
-  QuadMesh mesh;
-  std::vector<size_t> cells;
-  cells.reserve(resolution[0] * resolution[1] * resolution[2]);
-
   auto axis = bounding_box[1] - bounding_box[0];
   Vector3D delta(axis[0] / resolution[0], axis[1] / resolution[1], axis[2] / resolution[2]);
 
@@ -93,38 +128,8 @@ QuadMesh isosurface(std::function<double(const Point3D &)> f, double isolevel,
     }
   }
 
-  // Compute representative points for each cell
-  size_t mi = (resolution[1] + 1) * (resolution[2] + 1), mj = (resolution[2] + 1);
-  size_t point_index = 1;
-  std::array<double, 8> vertices;
-  for (size_t i = 0; i < resolution[0]; ++i) {
-    size_t index1 = i * mi;
-    for (size_t j = 0; j < resolution[1]; ++j) {
-      size_t index2 = index1 + j * mj;
-      for (size_t k = 0; k < resolution[2]; ++k) {
-        size_t index = index2 + k;
-
-        // Gather the distance values for cell (i,j,k)
-        for (size_t di = 0, vi = 0; di <= 1; ++di)
-          for (size_t dj = 0; dj <= 1; ++dj)
-            for (size_t dk = 0; dk <= 1; ++dk, ++vi)
-              vertices[vi] = values[index+di*mi+dj*mj+dk];
-
-        Point3D origin = bounding_box[0] +
-          Vector3D(delta[0] * i, 0, 0) +
-          Vector3D(0, delta[1] * j, 0) +
-          Vector3D(0, 0, delta[2] * k);
-        Point3D surface_point;
-        bool found = computeCell(origin, delta, vertices, surface_point);
-        if (found) {
-          mesh.addPoint(surface_point);
-          cells.push_back(point_index++);
-        } else
-          cells.push_back(0);
-      }
-    }
-  }
-
+  QuadMesh mesh;
+  auto cells = addPoints(mesh, values, bounding_box[0], delta, resolution);
   addQuads(mesh, values, cells, resolution);
 
   return mesh;
