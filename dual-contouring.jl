@@ -85,9 +85,9 @@ The return value is an array of quads, where each quad is an array containing 4 
 """
 function generate_faces(values, cells, resolution)
     quads = []
-    for r in [[1, 2, 3], [2, 3, 1], [3, 1, 2]]
-        value(i, j, k) = values[[i,j,k][r]...]
-        cell(i, j, k) = cells[[i,j,k][r]...]
+    for (r, value, cell) in [([1, 2, 3], (i, j, k) -> values[i,j,k], (i, j, k) -> cells[i,j,k]),
+                             ([2, 3, 1], (i, j, k) -> values[j,k,i], (i, j, k) -> cells[j,k,i]),
+                             ([3, 1, 2], (i, j, k) -> values[k,i,j], (i, j, k) -> cells[k,i,j])]
         for i in 1:resolution[r[1]], j in 2:resolution[r[2]], k in 2:resolution[r[3]]
             a, b, c, d = cell(i,j,k), cell(i,j-1,k), cell(i,j-1,k-1), cell(i,j,k-1)
             a * b * c * d == 0 && continue
