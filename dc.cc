@@ -89,7 +89,7 @@ void addQuads(QuadMesh &mesh, const std::vector<double> &values, const std::vect
         for (size_t k = 1; k < resolution[c2[c]]; ++k) {
           size_t index = i * ni + j * nj + k * nk;
           size_t a = cells[index], b = cells[index-nj], c = cells[index-nj-nk], d = cells[index-nk];
-          if (a * b * c * d != 0)
+          if (a * b * c * d == 0)
             continue;
           size_t vi = i * mi + j * mj + k * mk;
           double v1 = values[vi], v2 = values[vi+mi];
