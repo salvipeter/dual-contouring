@@ -4,13 +4,13 @@ namespace DualContouring {
 
 const double SMALL_NUMBER = 1e-15;
 
-bool computeCell(const Point3D &origin, const Vector3D &delta,
+bool computeCell(const Point3D &origin, const std::array<Vector3D, 3> &dirs,
                  const std::array<double, 8> &vertices, Point3D &surface_point) {
   bool negative = false, positive = false;
   for (size_t i = 0; i < 8; ++i)
     if (vertices[i] < 0)
       negative = true;
-    else if (vertices[i] > 0)
+    else
       positive = true;
   if (!negative || !positive)
     return false;
@@ -18,10 +18,6 @@ bool computeCell(const Point3D &origin, const Vector3D &delta,
   // Find all edge intersections, and take their mean
   static constexpr std::array<size_t, 24> edges =
     { 0, 4, 1, 5, 2, 6, 3, 7, 0, 2, 1, 3, 4, 6, 5, 7, 0, 1, 2, 3, 4, 5, 6, 7 };
-  std::array<Vector3D, 3> dirs =
-    { { { delta[0], 0, 0 },
-        { 0, delta[1], 0 },
-        { 0, 0, delta[2] } } };
 
   Point3D mean(0, 0, 0);
   size_t count = 0;
@@ -45,6 +41,11 @@ std::vector<size_t> addPoints(QuadMesh &mesh, const std::vector<double> &values,
   std::vector<size_t> cells;
   cells.reserve(resolution[0] * resolution[1] * resolution[2]);
 
+  std::array<Vector3D, 3> dirs =
+    { { { delta[0], 0, 0 },
+        { 0, delta[1], 0 },
+        { 0, 0, delta[2] } } };
+
   size_t mi = (resolution[1] + 1) * (resolution[2] + 1), mj = (resolution[2] + 1);
   size_t point_index = 1;
   std::array<double, 8> vertices;
@@ -61,12 +62,9 @@ std::vector<size_t> addPoints(QuadMesh &mesh, const std::vector<double> &values,
             for (size_t dk = 0; dk <= 1; ++dk, ++vi)
               vertices[vi] = values[index+di*mi+dj*mj+dk];
 
-        Point3D origin = corner +
-          Vector3D(delta[0] * i, 0, 0) +
-          Vector3D(0, delta[1] * j, 0) +
-          Vector3D(0, 0, delta[2] * k);
+        Point3D origin = corner + Vector3D(delta[0] * i, delta[1] * j, delta[2] * k);
         Point3D surface_point;
-        if (computeCell(origin, delta, vertices, surface_point)) {
+        if (computeCell(origin, dirs, vertices, surface_point)) {
           mesh.addPoint(surface_point);
           cells.push_back(point_index++);
         } else
@@ -91,16 +89,16 @@ void addQuads(QuadMesh &mesh, const std::vector<double> &values, const std::vect
         for (size_t k = 1; k < resolution[c2[c]]; ++k) {
           size_t index = i * ni + j * nj + k * nk;
           size_t a = cells[index], b = cells[index-nj], c = cells[index-nj-nk], d = cells[index-nk];
-          if (a * b * c * d != 0) {
-            size_t vi = i * mi + j * mj + k * mk;
-            double v1 = values[vi], v2 = values[vi+mi];
-            if (v1 * v2 > 0)
-              continue;
-            if (v1 < 0)
-              mesh.addQuad(a, b, c, d);
-            else
-              mesh.addQuad(d, c, b, a);
-          }
+          if (a * b * c * d != 0)
+            continue;
+          size_t vi = i * mi + j * mj + k * mk;
+          double v1 = values[vi], v2 = values[vi+mi];
+          if (v1 * v2 > 0)
+            continue;
+          if (v1 < 0)
+            mesh.addQuad(a, b, c, d);
+          else
+            mesh.addQuad(d, c, b, a);
         }
       }
     }
