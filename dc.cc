@@ -2,6 +2,8 @@
 
 namespace DualContouring {
 
+const double SMALL_NUMBER = 1e-15;
+
 bool computeCell(const Point3D &origin, const Vector3D &delta,
                  const std::array<double, 8> &vertices, Point3D &surface_point) {
   bool negative = false, positive = false;
@@ -14,7 +16,7 @@ bool computeCell(const Point3D &origin, const Vector3D &delta,
     return false;
 
   // Find all edge intersections, and take their mean
-  static const std::array<size_t, 24> edges =
+  static constexpr std::array<size_t, 24> edges =
     { 0, 4, 1, 5, 2, 6, 3, 7, 0, 2, 1, 3, 4, 6, 5, 7, 0, 1, 2, 3, 4, 5, 6, 7 };
   std::array<Vector3D, 3> dirs =
     { { { delta[0], 0, 0 },
@@ -28,13 +30,42 @@ bool computeCell(const Point3D &origin, const Vector3D &delta,
     double a = vertices[v1], b = vertices[v2];
     if (a * b > 0)
       continue;
-    double x = std::abs(a) / std::abs(b - a);
-    size_t c = i / 4;
-    mean += dirs[0] * (v1 / 4) + dirs[1] * ((v1 % 4) / 2) + dirs[2] * (v1 % 2) + dirs[c] * x;
+    double denom = std::abs(b - a);
+    double x = denom < SMALL_NUMBER ? 0.5 : std::abs(a) / denom;
+    mean += dirs[0] * (v1 / 4) + dirs[1] * ((v1 % 4) / 2) + dirs[2] * (v1 % 2) + dirs[i/4] * x;
     ++count;
   }
   surface_point = origin + mean / count;
   return true;
+}
+
+void addQuads(QuadMesh &mesh, const std::vector<double> &values, const std::vector<size_t> &cells,
+              const std::array<size_t, 3> &resolution) {
+  static constexpr std::array<size_t, 3> c1 = { 1, 2, 0 }, c2 = { 2, 0, 1 };
+  std::array<size_t, 3> ns = { resolution[1] * resolution[2], resolution[2], 1 };
+  std::array<size_t, 3> ms = { (resolution[1] + 1) * (resolution[2] + 1), resolution[2] + 1, 1 };
+  for (size_t c = 0; c < 3; ++c) {
+    size_t ni = ns[c], nj = ns[c1[c]], nk = ns[c2[c]];
+    size_t mi = ms[c], mj = ms[c1[c]], mk = ms[c2[c]];
+    for (size_t i = 0; i < resolution[c]; ++i) {
+      for (size_t j = 1; j < resolution[c1[c]]; ++j) {
+        for (size_t k = 1; k < resolution[c2[c]]; ++k) {
+          size_t index = i * ni + j * nj + k * nk;
+          size_t a = cells[index], b = cells[index-nj], c = cells[index-nj-nk], d = cells[index-nk];
+          if (a * b * c * d != 0) {
+            size_t vi = i * mi + j * mj + k * mk;
+            double v1 = values[vi], v2 = values[vi+mi];
+            if (v1 * v2 > 0)
+              continue;
+            if (v1 < 0)
+              mesh.addQuad(a, b, c, d);
+            else
+              mesh.addQuad(d, c, b, a);
+          }
+        }
+      }
+    }
+  }
 }
 
 QuadMesh isosurface(std::function<double(const Point3D &)> f, double isolevel,
@@ -43,7 +74,6 @@ QuadMesh isosurface(std::function<double(const Point3D &)> f, double isolevel,
   QuadMesh mesh;
   std::vector<size_t> cells;
   cells.reserve(resolution[0] * resolution[1] * resolution[2]);
-  std::vector<Point3D> point2corner;
 
   auto axis = bounding_box[1] - bounding_box[0];
   Vector3D delta(axis[0] / resolution[0], axis[1] / resolution[1], axis[2] / resolution[2]);
@@ -58,7 +88,7 @@ QuadMesh isosurface(std::function<double(const Point3D &)> f, double isolevel,
       for (size_t k = 0; k <= resolution[2]; ++k) {
         double z = delta[2] * k;
         double v = f(bounding_box[0] + Vector3D(x, y, z)) - isolevel;
-        values.push_back(v != 0 ? v : 1e-15); // handling zeros is a nightmare
+        values.push_back(v != 0 ? v : SMALL_NUMBER); // handling zeros is a nightmare
       }
     }
   }
@@ -95,32 +125,7 @@ QuadMesh isosurface(std::function<double(const Point3D &)> f, double isolevel,
     }
   }
 
-  // Add the quads
-  constexpr std::array<size_t, 3> c1 = { 1, 2, 0 }, c2 = { 2, 0, 1 };
-  std::array<size_t, 3> ns = { resolution[1] * resolution[2], resolution[2], 1 };
-  std::array<size_t, 3> ms = { (resolution[1] + 1) * (resolution[2] + 1), resolution[2] + 1, 1 };
-  for (size_t c = 0; c < 3; ++c) {
-    size_t ni = ns[c], nj = ns[c1[c]], nk = ns[c2[c]];
-    size_t mi = ms[c], mj = ms[c1[c]], mk = ms[c2[c]];
-    for (size_t i = 0; i < resolution[c]; ++i) {
-      for (size_t j = 1; j < resolution[c1[c]]; ++j) {
-        for (size_t k = 1; k < resolution[c2[c]]; ++k) {
-          size_t index = i * ni + j * nj + k * nk;
-          size_t a = cells[index], b = cells[index-nj], c = cells[index-nj-nk], d = cells[index-nk];
-          if (a * b * c * d != 0) {
-            size_t vi = i * mi + j * mj + k * mk;
-            double v1 = values[vi], v2 = values[vi+mi];
-            if (v1 * v2 > 0)
-              continue;
-            if (v1 < 0)
-              mesh.addQuad(a, b, c, d);
-            else
-              mesh.addQuad(d, c, b, a);
-          }
-        }
-      }
-    }
-  }
+  addQuads(mesh, values, cells, resolution);
 
   return mesh;
 }
