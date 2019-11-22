@@ -1,11 +1,36 @@
 module DualContouring
 
+using LinearAlgebra
+
 export isosurface, writeOBJ
 
 ϵ = 1e-15
 
 """
-    compute_cell(origin, dirs, vertices)
+    isosurface_point(points, df, limits)
+
+Computes the likely position of a point on the isosurface, based on 0-crossing on the
+cell's edges given in `points`. `df` is the gradient of the function,
+and `limits` is a pair of points defining the size of the cell.
+
+When `df` is `nothing`, the isosurface point is created based only on the distance values.
+"""
+function isosurface_point(points, df, limits)
+    m = length(points)
+    (df === nothing || m < 3) && return sum(points) / m
+    A = Array{Float64}(undef, m, 3)
+    b = Vector{Float64}(undef, m)
+    for i in 1:m
+        n = df(points[i])
+        A[i,:] = n
+        b[i] = dot(n, points[i])
+    end
+    q = A \ b
+    any(x < 0 for x in q - limits[1]) || any(x < 0 for x in limits[2] - q) ? sum(points) / m : q
+end
+
+"""
+    compute_cell(origin, dirs, vertices, df)
 
 Computes an approximate position of the isosurface in a cell. `origin` is the bottom-left-front
 corner of the cell, with `dirs` contains 3 axis-aligned vectors going to the opposite corner.
@@ -18,16 +43,18 @@ corner of the cell, with `dirs` contains 3 axis-aligned vectors going to the opp
     |/    |/      |/
     1-----2       O----> X
 ```
+`df` is the gradient function (when available), or `nothing`.
+
 It is assumed that the function values are never exactly zero.
 When all values have the same sign, the function returns `nothing`.
 """
-function compute_cell(origin, dirs, vertices)
+function compute_cell(origin, dirs, vertices, df)
     (all(v < 0 for v in vertices) || all(v > 0 for v in vertices)) && return nothing
     edges = [0, 4, 1, 5, 2, 6, 3, 7,
              0, 2, 1, 3, 4, 6, 5, 7,
              0, 1, 2, 3, 4, 5, 6, 7]
     mean = [0, 0, 0]
-    count = 0
+    points = []
     for i in 1:12
         v1, v2 = edges[2i-1], edges[2i]
         a, b = vertices[v1+1], vertices[v2+1]
@@ -35,14 +62,14 @@ function compute_cell(origin, dirs, vertices)
         denom = abs(b - a)
         x = denom < ϵ ? 0.5 : abs(a) / denom
         c = (i - 1) ÷ 4 + 1
-        mean += dirs[1] * (v1 ÷ 4) + dirs[2] * (v1 % 4 ÷ 2) + dirs[3] * (v1 % 2) + dirs[c] * x
-        count += 1
+        p = origin + dirs[1] * (v1 ÷ 4) + dirs[2] * (v1 % 4 ÷ 2) + dirs[3] * (v1 % 2) + dirs[c] * x
+        push!(points, p)
     end
-    origin + mean / count
+    isosurface_point(points, df, (origin, origin + sum(dirs)))
 end
 
 """
-    generate_cells(values, corner, delta, resolution)
+    generate_cells(values, df, corner, delta, resolution)
 
 Generates cells with dual points for an isosurface. `values` is a 3D matrix of dimension
 `resolution[i]+1` in each direction, containing the function values. `corner` is the
@@ -53,7 +80,7 @@ The return value is a `(points, cells)` pair, where `points` is a list of approx
 of the isosurface, and `cells` is a 3D matrix of dimension `resolution[i]` in each direction,
 containing an index to the `points` array, or 0 when empty.
 """
-function generate_cells(values, corner, delta, resolution)
+function generate_cells(values, df, corner, delta, resolution)
     cells = zeros(Int, resolution)
     points = []
     dirs = [[delta[1], 0, 0],
@@ -65,7 +92,7 @@ function generate_cells(values, corner, delta, resolution)
             push!(vertices, values[i+di,j+dj,k+dk])
         end
         origin = corner + [delta[1] * (i - 1), delta[2] * (j - 1), delta[3] * (k - 1)]
-        surface_point = compute_cell(origin, dirs, vertices)
+        surface_point = compute_cell(origin, dirs, vertices, df)
         if surface_point != nothing
             push!(points, surface_point)
             cells[i,j,k] = length(points)
@@ -104,25 +131,27 @@ function generate_faces(values, cells, resolution)
 end
 
 """
-    isosurface(f, isolevel, bounding_box, resolution)
+    isosurface(f, isolevel, bounding_box, resolution; df)
 
 Generates the isosurface of `f` at the given `isolevel`. The `bounding_box` is a tuple
 containing the bottom-left-front and top-right-back points. The `resolution` is given as a
 tuple of 3 integers - the number of cells in each of the axis directions.
+
+When `df` is given, it is assumed to be the gradient function.
 
 Sphere example:
 
     julia> using LinearAlgebra
     julia> isosurface(p -> norm(p) - 1, 0, ([-2, -2, -2], [2, 2, 2]), (20, 20, 20))
 """
-function isosurface(f, isolevel, bounding_box, resolution)
+function isosurface(f, isolevel, bounding_box, resolution; df=nothing)
     delta = (bounding_box[2] - bounding_box[1]) ./ resolution
     values = zeros(resolution .+ 1)
     for i in 0:resolution[1], j in 0:resolution[2], k in 0:resolution[3]
         v = f(bounding_box[1] + delta .* [i, j, k]) - isolevel
         values[i+1,j+1,k+1] = abs(v) < ϵ ? copysign(ϵ, v) : v
     end
-    points, cells = generate_cells(values, bounding_box[1], delta, resolution)
+    points, cells = generate_cells(values, df, bounding_box[1], delta, resolution)
     faces = generate_faces(values, cells, resolution)
     points, faces
 end
