@@ -106,7 +106,7 @@ void addQuads(QuadMesh &mesh, const std::vector<double> &values, const std::vect
 }
 
 QuadMesh isosurface(std::function<double(const Point3D &)> f, double isolevel,
-                    const std::array<Point3D, 2> &bounding_box, 
+                    const std::array<Point3D, 2> &bounding_box,
                     const std::array<size_t, 3> &resolution) {
   auto axis = bounding_box[1] - bounding_box[0];
   Vector3D delta(axis[0] / resolution[0], axis[1] / resolution[1], axis[2] / resolution[2]);
@@ -121,9 +121,29 @@ QuadMesh isosurface(std::function<double(const Point3D &)> f, double isolevel,
       for (size_t k = 0; k <= resolution[2]; ++k) {
         double z = delta[2] * k;
         double v = f(bounding_box[0] + Vector3D(x, y, z)) - isolevel;
-        values.push_back(v != 0 ? v : SMALL_NUMBER); // handling zeros is a nightmare
+        values.push_back(std::abs(v) < SMALL_NUMBER ? (v < 0 ? -SMALL_NUMBER : SMALL_NUMBER) : v);
       }
     }
+  }
+
+  QuadMesh mesh;
+  auto cells = addPoints(mesh, values, bounding_box[0], delta, resolution);
+  addQuads(mesh, values, cells, resolution);
+
+  return mesh;
+}
+
+QuadMesh isosurface(const std::vector<double> &distances, double isolevel,
+                    const std::array<Point3D, 2> &bounding_box,
+                    const std::array<size_t, 3> &resolution) {
+  auto axis = bounding_box[1] - bounding_box[0];
+  Vector3D delta(axis[0] / resolution[0], axis[1] / resolution[1], axis[2] / resolution[2]);
+
+  std::vector<double> values = distances;
+  for (double &v : values) {
+    v -= isolevel;
+    if (std::abs(v) < SMALL_NUMBER)
+      v = v < 0 ? -SMALL_NUMBER : SMALL_NUMBER;
   }
 
   QuadMesh mesh;
